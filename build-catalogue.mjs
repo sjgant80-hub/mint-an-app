@@ -11,9 +11,15 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildCatalogue } from './catalogue.mjs';
 
-const idx = JSON.parse(readFileSync('C:/Users/sjgan/.claude/projects/C--Users-sjgan--claude/memory/estate-index.json', 'utf8'));
+// Reads a PUBLIC-ONLY snapshot of the estate index committed beside this file. The full index at
+// ~/.claude/.../estate-index.json carries the 46 private repo names; vendoring the whole thing into a
+// public repo would leak them (see memory pages-leak-sweep). catalogue.mjs already refuses private
+// nodes, so a private-stripped index yields a byte-identical catalogue — and lets CI rebuild the data
+// deterministically on GitHub's own runner (proving it was built by the gated law, not hand-typed).
+// Regenerate this snapshot with: node make-public-index.mjs
+const idx = JSON.parse(readFileSync('./estate-index-public.json', 'utf8'));
 const evidence = JSON.parse(readFileSync('./workflow-evidence.json', 'utf8'));
-const generatedAt = readFileSync('./.evidence-generated', 'utf8').trim();
+const generatedAt = readFileSync('./.evidence-generated', 'utf8').trim().replace(/^generated:\s*/i, '');
 
 const c = buildCatalogue(idx.nodes, evidence);
 if (!c.ok) { console.error('REFUSED:', c.why); process.exit(1); }

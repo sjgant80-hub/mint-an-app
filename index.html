@@ -101,9 +101,11 @@ function render() {
     (active === 'all' || r.tier === active) &&
     (!q || r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q))
   );
-  document.getElementById('count').textContent = `${rows.length} shown`;
+  const CAP = 300;
+  const shown = Math.min(rows.length, CAP);
+  document.getElementById('count').textContent = rows.length > CAP ? `showing ${shown} of ${rows.length}` : `${rows.length} shown`;
   document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
-  document.getElementById('grid').innerHTML = rows.slice(0, 300).map((r) => `
+  document.getElementById('grid').innerHTML = rows.slice(0, CAP).map((r) => `
     <div class="card">
       <span class="badge ${r.tier}">${r.tier}</span>
       <h3>${esc(r.name)}</h3>

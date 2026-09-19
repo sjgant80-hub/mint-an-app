@@ -29,6 +29,15 @@ jobs:
             --baseline witness.baseline.json \
             --test node --test catalogue.test.mjs
 
+      - name: leak guard — the committed public index must contain zero private nodes
+        run: |
+          node -e "
+            const idx = require('./estate-index-public.json');
+            const priv = idx.nodes.filter((n) => n.private === true);
+            if (priv.length) { console.error('REFUSED: ' + priv.length + ' private node(s) in a PUBLIC index — a leak'); process.exit(1); }
+            console.log('leak guard clean — ' + idx.nodes.length + ' public nodes, 0 private');
+          "
+
       - name: the shipped catalogue data was actually built by the gated law, not hand-typed
         run: |
           node build-catalogue.mjs
