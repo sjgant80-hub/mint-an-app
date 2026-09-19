@@ -1,0 +1,11 @@
+{
+  "name": "mint-an-app",
+  "version": "0.1.0",
+  "description": "Mint a pre-done app from the estate's live, gated surfaces — own it, run it local, expand it. No subscription.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tier.test.mjs catalogue.test.mjs"
+  },
+  "repository": { "type": "git", "url": "https://github.com/sjgant80-hub/mint-an-app" }
+}

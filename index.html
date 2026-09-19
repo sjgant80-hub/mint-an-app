@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mint an App — own a pre-done app from the estate</title>
+<meta name="description" content="Browse real, gated apps and own one instead of building from a blank page on a metered model. Every tier badge is computed from GitHub's own CI record — never a claim a repo made about itself.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+<style>
+  :root {
+    --bg:#0b0d10; --panel:#12151a; --line:#232830; --text:#e8ecf1; --soft:#8b95a5;
+    --good:#3ddc84; --warn:#f5c542; --bad:#ff6b6b; --accent:#5b8cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { max-width:1100px; margin:0 auto; padding:40px 20px 20px; }
+  h1 { font-size:1.9rem; margin:0 0 8px; }
+  .sub { color:var(--soft); max-width:700px; font-size:.98rem; }
+  .stats { display:flex; gap:14px; flex-wrap:wrap; margin:22px 0 6px; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 16px; }
+  .stat b { font-size:1.3rem; display:block; }
+  .stat.proven b { color:var(--good); } .stat.works b { color:var(--accent); } .stat.prototype b { color:var(--soft); }
+  .meta { color:var(--soft); font-size:.82rem; margin-top:6px; }
+  .controls { max-width:1100px; margin:18px auto 0; padding:0 20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .controls input[type=search] { flex:1; min-width:200px; background:var(--panel); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px 12px; font-size:.95rem; }
+  .tabs { display:flex; gap:6px; }
+  .tab { background:var(--panel); border:1px solid var(--line); color:var(--soft); border-radius:20px; padding:7px 14px; font-size:.85rem; cursor:pointer; }
+  .tab[aria-pressed="true"] { color:var(--text); border-color:var(--accent); background:#182238; }
+  main { max-width:1100px; margin:0 auto; padding:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px; }
+  .card h3 { margin:0; font-size:1.02rem; overflow-wrap:anywhere; }
+  .card p { margin:0; color:var(--soft); font-size:.85rem; flex:1; }
+  .badge { align-self:flex-start; font-size:.72rem; font-weight:700; letter-spacing:.02em; padding:3px 9px; border-radius:20px; text-transform:uppercase; }
+  .badge.proven { background:#123322; color:var(--good); } .badge.works { background:#131f38; color:var(--accent); } .badge.prototype { background:#232830; color:var(--soft); }
+  .why { color:var(--soft); font-size:.76rem; }
+  .card a.open { color:var(--accent); font-size:.85rem; text-decoration:none; }
+  .card a.open:hover { text-decoration:underline; }
+  .eligible { font-size:.78rem; color:var(--good); }
+  .empty { color:var(--soft); text-align:center; padding:60px 20px; }
+  footer { max-width:1100px; margin:40px auto 30px; padding:20px; border-top:1px solid var(--line); color:var(--soft); font-size:.82rem; }
+  footer a { color:var(--soft); }
+  #count { color:var(--soft); font-size:.85rem; margin-left:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mint an App</h1>
+  <p class="sub">Vibecoding tools sell you a blank page and a metered model, and you own nothing at the end. This estate already has hundreds of real, live apps. Browse them below — <b>Proven</b> and <b>Works</b> apps have been checked on GitHub's own hardware, not just claimed. A <b>Prototype</b> is named honestly, not sold as done. Nothing here has a price.</p>
+  <div class="stats" id="stats"></div>
+  <div class="meta" id="meta"></div>
+</header>
+<div class="controls">
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <input type="search" id="search" placeholder="Search by name or description…" aria-label="Search apps">
+  <span id="count"></span>
+</div>
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">No apps match — try a different search or tier.</div>
+</main>
+<footer>
+  Every tier badge above is <b>computed</b> from GitHub's own CI record for that repo — never typed, never a claim a repo made about itself (the same tier law as fallworld's own ladder, vendored here rather than forked). Tier data generated <span id="genDate"></span> from the real estate index. Minting (owning a copy, forked or downloaded, running local) is not wired yet — this page is the honest catalogue first.<br>
+  Powered by the Konomi architecture, created by Thomas Frumkin. MIT · AI-Native Solutions.
+</footer>
+<script>
+const TIERS = ['all', 'proven', 'works', 'prototype'];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let DATA = null, active = 'all';
+
+async function load() {
+  const res = await fetch('catalogue-data.json');
+  if (!res.ok) { document.getElementById('grid').innerHTML = ''; document.getElementById('empty').style.display = 'block'; document.getElementById('empty').textContent = 'Could not load the catalogue data.'; return; }
+  DATA = await res.json();
+  renderStats();
+  renderTabs();
+  render();
+}
+
+function renderStats() {
+  const t = DATA.tally;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat proven"><b>${t.proven}</b>proven</div>
+    <div class="stat works"><b>${t.works}</b>works</div>
+    <div class="stat prototype"><b>${t.prototype}</b>prototype</div>`;
+  document.getElementById('meta').textContent = `${DATA.total} public apps in the catalogue · tier data generated ${new Date(DATA.generatedAt).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})}`;
+  document.getElementById('genDate').textContent = new Date(DATA.generatedAt).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'});
+}
+
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = TIERS.map((t) =>
+    `<button class="tab" role="tab" aria-pressed="${t === active}" data-tier="${t}">${t === 'all' ? 'All' : t[0].toUpperCase() + t.slice(1)}</button>`
+  ).join('');
+  document.querySelectorAll('.tab').forEach((b) => b.onclick = () => { active = b.dataset.tier; renderTabs(); render(); });
+}
+
+function render() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const rows = DATA.rows.filter((r) =>
+    (active === 'all' || r.tier === active) &&
+    (!q || r.name.toLowerCase().includes(q) || r.desc.toLowerCase().includes(q))
+  );
+  document.getElementById('count').textContent = `${rows.length} shown`;
+  document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+  document.getElementById('grid').innerHTML = rows.slice(0, 300).map((r) => `
+    <div class="card">
+      <span class="badge ${r.tier}">${r.tier}</span>
+      <h3>${esc(r.name)}</h3>
+      <p>${esc(r.desc) || 'no description on record'}</p>
+      <div class="why">${esc(r.why)}</div>
+      ${r.mintEligible ? '<div class="eligible">✓ ready to own — mint coming soon</div>' : ''}
+      ${r.url ? `<a class="open" href="${esc(r.url)}" target="_blank" rel="noopener">Open it ↗</a>` : ''}
+    </div>`).join('');
+}
+
+document.getElementById('search').addEventListener('input', render);
+load();
+</script>
+</body>
+</html>

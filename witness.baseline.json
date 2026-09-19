@@ -1,0 +1,7 @@
+[
+  {
+    "mutation": "&& → ||",
+    "snippet": "const key = (isObj(node) && isStr(node.name)) ? node.name : '';",
+    "reason": "Genuinely equivalent, checked empirically not just argued: this key only steers WHICH evidence gets looked up before calling catalogueRow(node, ev[key]) — but catalogueRow independently re-validates isStr(node.name) as its own first guard, refusing the row outright whenever the name isn't a real string, regardless of which evidence was fetched. Ran the adversarial case directly in node: a node with a non-string name (42) plus an evidenceByName crafted with BOTH a '' key and a '42' key holding distinctive PROVEN evidence — the && and || variants resolve to DIFFERENT keys ('' vs 42) and DO find different evidence objects, but buildCatalogue's final rows/tally/total are identical either way (empty), because the row is refused by catalogueRow before that evidence is ever used. No input can make the two variants diverge in buildCatalogue's actual output."
+  }
+]

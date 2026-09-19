@@ -1,0 +1,49 @@
+name: proof-of-play
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+
+      - name: the tier law against fallworld's own examples (vendored verbatim)
+        run: node --test tier.test.mjs
+
+      - name: the catalogue law against its own examples
+        run: node --test catalogue.test.mjs
+
+      # Pinned. An unpinned gate is a gate somebody else can change.
+      - name: witness — try to break the tier law (must be CLEAN)
+        run: |
+          git clone --depth 1 --branch v0.6 https://github.com/sjgant80-hub/witness.git /tmp/witness
+          node /tmp/witness/witness.mjs mutate tier.mjs \
+            --timeout 60000 --cap 5000 \
+            --test node --test tier.test.mjs
+
+      - name: witness — try to break the catalogue law (must be CLEAN)
+        run: |
+          node /tmp/witness/witness.mjs mutate catalogue.mjs \
+            --timeout 60000 --cap 5000 \
+            --baseline witness.baseline.json \
+            --test node --test catalogue.test.mjs
+
+      - name: the shipped catalogue data was actually built by the gated law, not hand-typed
+        run: |
+          node build-catalogue.mjs
+          git diff --exit-code catalogue-data.json || \
+            (echo "REFUSED: catalogue-data.json does not match a fresh build — it was edited by hand or evidence went stale" && exit 1)
+
+      - name: page gate — no pricing, Konomi credit present, no dead mint buttons
+        run: |
+          node -e "
+            const fs = require('fs');
+            const html = fs.readFileSync('index.html', 'utf8');
+            const fails = [];
+            if (/£\d|\\\$\d|per\s*(seat|month|user)\b/i.test(html.replace(/Nothing here has a price\.?/i, ''))) fails.push('pricing text found');
+            if (!/konomi/i.test(html)) fails.push('no Konomi credit');
+            if (/id=[\"']btnMint[\"']|class=[\"'][^\"']*mint-btn/i.test(html)) fails.push('a mint action control exists but Phase 2 is not built — that is a dead control');
+            if (fails.length) { console.error('REFUSED:', fails.join('; ')); process.exit(1); }
+            console.log('page gate clean');
+          "
