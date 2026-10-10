@@ -14,6 +14,9 @@ jobs:
       - name: the catalogue law against its own examples
         run: node --test catalogue.test.mjs
 
+      - name: the mint law against its own examples
+        run: node --test mint.test.mjs
+
       # Pinned. An unpinned gate is a gate somebody else can change.
       - name: witness — try to break the tier law (must be CLEAN)
         run: |
@@ -28,6 +31,13 @@ jobs:
             --timeout 60000 --cap 5000 \
             --baseline witness.baseline.json \
             --test node --test catalogue.test.mjs
+
+      - name: witness — try to break the mint law (must be CLEAN)
+        run: |
+          node /tmp/witness/witness.mjs mutate mint.mjs \
+            --timeout 60000 --cap 5000 \
+            --baseline mint.baseline.json \
+            --test node --test mint.test.mjs
 
       - name: leak guard — the committed public index must contain zero private nodes
         run: |
@@ -44,7 +54,24 @@ jobs:
           git diff --exit-code catalogue-data.json || \
             (echo "REFUSED: catalogue-data.json does not match a fresh build — it was edited by hand or evidence went stale" && exit 1)
 
-      - name: page gate — no pricing, Konomi credit present, no dead mint buttons
+      - name: the shipped mint data was actually derived by the gated law, not hand-typed
+        run: |
+          node build-mint.mjs
+          git diff --exit-code mint-data.json || \
+            (echo "REFUSED: mint-data.json does not match a fresh derivation from mint-raw.json" && exit 1)
+
+      - name: every shipped mint entry names a repo the catalogue holds as mint-eligible
+        run: |
+          node -e "
+            const cat = require('./catalogue-data.json');
+            const mint = require('./mint-data.json');
+            const ok = new Set(cat.rows.filter((r) => r.mintEligible).map((r) => r.name));
+            const bad = Object.keys(mint.apps).filter((n) => !ok.has(n));
+            if (bad.length) { console.error('REFUSED: mint data names non-eligible repos:', bad.join(', ')); process.exit(1); }
+            console.log('mint data clean — ' + Object.keys(mint.apps).length + ' entries, all mint-eligible');
+          "
+
+      - name: page gate — no pricing, Konomi credit, the mint affordance is granted by the LAW
         run: |
           node -e "
             const fs = require('fs');
@@ -52,7 +79,9 @@ jobs:
             const fails = [];
             if (/£\d|\\\$\d|per\s*(seat|month|user)\b/i.test(html.replace(/Nothing here has a price\.?/i, ''))) fails.push('pricing text found');
             if (!/konomi/i.test(html)) fails.push('no Konomi credit');
-            if (/id=[\"']btnMint[\"']|class=[\"'][^\"']*mint-btn/i.test(html)) fails.push('a mint action control exists but Phase 2 is not built — that is a dead control');
+            if (/coming soon/i.test(html)) fails.push('a coming-soon label survived Phase 2 — stale honesty is dishonesty');
+            if (!/import\s*\{[^}]*mintDecision[^}]*\}\s*from\s*'\.\/mint\.mjs'/.test(html)) fails.push('the page does not import the gated mint law — the live logic must BE the gated logic');
+            if (!/mintDecision\(/.test(html)) fails.push('no call to mintDecision — the affordance is not granted by the law');
             if (fails.length) { console.error('REFUSED:', fails.join('; ')); process.exit(1); }
             console.log('page gate clean');
           "

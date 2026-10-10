@@ -36,7 +36,16 @@
   .why { color:var(--soft); font-size:.76rem; }
   .card a.open { color:var(--accent); font-size:.85rem; text-decoration:none; }
   .card a.open:hover { text-decoration:underline; }
-  .eligible { font-size:.78rem; color:var(--good); }
+  .mint { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+  .mint-btn { background:#123322; color:var(--good); border:1px solid #1d5c3c; border-radius:8px; padding:9px 12px; font-size:.88rem; font-weight:600; cursor:pointer; text-align:center; text-decoration:none; display:block; }
+  .mint-btn:hover { border-color:var(--good); }
+  .mint-btn[disabled] { opacity:.6; cursor:wait; }
+  .mint-btn.fork { background:#131f38; color:var(--accent); border-color:#2a4580; }
+  .mint-btn.fork:hover { border-color:var(--accent); }
+  .mint-note { color:var(--soft); font-size:.74rem; }
+  .mint-err { color:var(--bad); font-size:.78rem; }
+  .proof { font-size:.74rem; color:var(--soft); }
+  .proof a { color:var(--soft); }
   .empty { color:var(--soft); text-align:center; padding:60px 20px; }
   footer { max-width:1100px; margin:40px auto 30px; padding:20px; border-top:1px solid var(--line); color:var(--soft); font-size:.82rem; }
   footer a { color:var(--soft); }
@@ -60,19 +69,27 @@
   <div class="empty" id="empty" style="display:none">No apps match — try a different search or tier.</div>
 </main>
 <footer>
-  Every tier badge above is <b>computed</b> from GitHub's own CI record for that repo — never typed, never a claim a repo made about itself (the same tier law as fallworld's own ladder, vendored here rather than forked). Tier data generated <span id="genDate"></span> from the real estate index. Minting (owning a copy, forked or downloaded, running local) is not wired yet — this page is the honest catalogue first.<br>
+  Every tier badge above is <b>computed</b> from GitHub's own CI record for that repo — never typed, never a claim a repo made about itself (the same tier law as fallworld's own ladder, vendored here rather than forked). Tier data generated <span id="genDate"></span> from the real estate index. <b>Own it</b> downloads the app's real file straight off its pinned commit, bundled with its licence and a provenance note carrying the CI-run proof — re-runnable by you or your agent before you rely on it. <b>Fork it</b> takes you to GitHub's own fork page (you need a GitHub account; the fork lands in it, history and all).<br>
   Powered by the Konomi architecture, created by Thomas Frumkin. MIT · AI-Native Solutions.
 </footer>
-<script>
+<script type="module">
+import { mintDecision, provenanceNote, storeZip } from './mint.mjs';
+
 const TIERS = ['all', 'proven', 'works', 'prototype'];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let DATA = null, active = 'all';
+// The door opens on the ELITE shelf: Proven first — gated on GitHub's own hardware, ready to own.
+// Prototypes stay one tab away, labelled, never deleted and never sold.
+let DATA = null, MINT = { generatedAt: null, apps: {} }, active = 'proven';
 
 async function load() {
   const res = await fetch('catalogue-data.json');
   if (!res.ok) { document.getElementById('grid').innerHTML = ''; document.getElementById('empty').style.display = 'block'; document.getElementById('empty').textContent = 'Could not load the catalogue data.'; return; }
   DATA = await res.json();
+  try {
+    const m = await fetch('mint-data.json');
+    if (m.ok) MINT = await m.json();
+  } catch { /* no mint data -> every eligible app honestly falls back to the fork path */ }
   renderStats();
   renderTabs();
   render();
@@ -111,10 +128,85 @@ function render() {
       <h3>${esc(r.name)}</h3>
       <p>${esc(r.desc) || 'no description on record'}</p>
       <div class="why">${esc(r.why)}</div>
-      ${r.mintEligible ? '<div class="eligible">✓ ready to own — mint coming soon</div>' : ''}
       ${r.url ? `<a class="open" href="${esc(r.url)}" target="_blank" rel="noopener">Open it ↗</a>` : ''}
+      ${mintBlock(r)}
     </div>`).join('');
 }
+
+// The affordance is GRANTED BY THE GATED LAW, never by this page: mintDecision re-checks the tier
+// itself, so a prototype can never render a mint control even if a data file lied to us.
+function mintBlock(r) {
+  const app = MINT.apps[r.name];
+  const d = mintDecision(r, app);
+  if (d.kind === 'none') return '';
+  const proof = app ? `<div class="proof">verify first: <a href="${esc(app.runUrl || `https://github.com/sjgant80-hub/${r.name}/actions`)}" target="_blank" rel="noopener">CI run ↗</a> · <a href="https://github.com/sjgant80-hub/${esc(r.name)}" target="_blank" rel="noopener">repo</a> · pinned <code>${esc(app.sha.slice(0, 7))}</code></div>`
+    : `<div class="proof">verify first: <a href="https://github.com/sjgant80-hub/${esc(r.name)}/actions" target="_blank" rel="noopener">CI record ↗</a> · <a href="https://github.com/sjgant80-hub/${esc(r.name)}" target="_blank" rel="noopener">repo</a></div>`;
+  if (d.kind === 'download') {
+    return `<div class="mint">
+      <button class="mint-btn" data-mint="${esc(r.name)}">⬇ Own it — download</button>
+      <div class="mint-note">one real file + licence + provenance, zipped. Runs local. No account, no subscription.</div>
+      ${proof}</div>`;
+  }
+  return `<div class="mint">
+    <a class="mint-btn fork" href="https://github.com/sjgant80-hub/${esc(r.name)}/fork" target="_blank" rel="noopener">⑂ Fork it on GitHub ↗</a>
+    <div class="mint-note">the app is its whole repo — forking copies it, history and all, to your GitHub account (login needed).</div>
+    ${proof}</div>`;
+}
+
+async function fetchPinned(name, sha, path) {
+  const res = await fetch(`https://raw.githubusercontent.com/${encodeURIComponent('sjgant80-hub')}/${encodeURIComponent(name)}/${sha}/${path}`);
+  if (!res.ok) throw new Error(`could not fetch ${path} at the pinned commit (${res.status})`);
+  return res.text();
+}
+
+async function mint(name, btn) {
+  const app = MINT.apps[name];
+  const row = DATA.rows.find((r) => r.name === name);
+  const d = mintDecision(row, app);
+  if (d.kind !== 'download') return;
+  btn.disabled = true;
+  const was = btn.textContent;
+  btn.textContent = 'minting…';
+  const errBox = btn.parentElement.querySelector('.mint-err');
+  if (errBox) errBox.remove();
+  try {
+    const file = await fetchPinned(name, app.sha, d.file);
+    const entries = [{ name: `${name}/${d.file}`, data: file }];
+    let licenseNote = null;
+    if (d.license) {
+      entries.push({ name: `${name}/${d.license}`, data: await fetchPinned(name, app.sha, d.license) });
+      licenseNote = `${app.spdx || 'see file'} — the repo's own ${d.license} is included in this bundle.`;
+    } else {
+      licenseNote = 'no LICENSE file at this pinned commit — check the repo before relying on it commercially.';
+    }
+    const prov = provenanceNote({
+      name, tier: row.tier, why: row.why, sha: app.sha,
+      mintedAt: new Date().toISOString(), generatedAt: MINT.generatedAt || DATA.generatedAt,
+      runUrl: app.runUrl, workflow: app.workflow, licenseNote,
+    });
+    if (!prov.ok) throw new Error(prov.why);
+    entries.push({ name: `${name}/PROVENANCE.txt`, data: prov.text });
+    const zip = storeZip(entries);
+    if (!zip.ok) throw new Error(zip.why);
+    const url = URL.createObjectURL(new Blob([zip.bytes], { type: 'application/zip' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `${name}-${app.sha.slice(0, 7)}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    btn.textContent = '✓ yours — check your downloads';
+    setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 6000);
+  } catch (e) {
+    btn.textContent = was;
+    btn.disabled = false;
+    btn.insertAdjacentHTML('afterend',
+      `<div class="mint-err">mint failed: ${esc(e.message)} — <a href="https://github.com/sjgant80-hub/${esc(name)}" target="_blank" rel="noopener">take it straight from the repo</a></div>`);
+  }
+}
+
+document.getElementById('grid').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-mint]');
+  if (btn) mint(btn.dataset.mint, btn);
+});
 
 document.getElementById('search').addEventListener('input', render);
 load();

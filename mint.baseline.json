@@ -1,0 +1,7 @@
+[
+  {
+    "mutation": "< → <=",
+    "snippet": "for (let n = 0; n < 256; n++) {",
+    "reason": "Genuinely equivalent by the semantics of typed arrays, verified empirically in node: the mutant runs one extra iteration (n=256) and assigns t[256] on a Uint32Array(256) — an out-of-bounds write on a typed array is silently discarded (no growth, no throw, no index 256), so the table's 256 real entries are byte-identical either way and crc32's output cannot differ for any input. Confirmed directly: `const t=new Uint32Array(2); t[2]=99;` leaves t unchanged and t[2] undefined. No observable behaviour exists for a test to pin."
+  }
+]
